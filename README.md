@@ -1,73 +1,73 @@
-# Welcome to your Lovable project
+# 🧮 Operational Research Cost Minimization Model
 
-## Project info
+A web-based decision support system designed to **minimize total operational costs** in waste collection, processing, and disposal systems using principles from **Operational Research (OR)**.
 
-**URL**: https://lovable.dev/projects/98fec772-31c5-405d-b3a7-9e6838c42f22
+This project was developed as part of the **Operational Research Course Project** at **VIT Vellore**.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## 👥 Group Members
 
-**Use Lovable**
+| Name | Register Number | Role |
+|------|------------------|------|
+| **Vaibhav Dhaka** | 24BBS0176 | Frontend Developer (UI Design, Cost Input Module, Integration) |
+| **Anuska Goswami** | 24BBS0179 | Data Visualization & Analysis |
+| **Arohi Srivastava** | 24BBS0009 | Optimization Model Design & Testing |
+| **Aditya Chourasia** | 24BBS0227 | Backend Developer (Supabase Setup & API Integration) |
+| **Shourya Goyal** | 24BBS0132 | Documentation, Presentation & Report Compilation |
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/98fec772-31c5-405d-b3a7-9e6838c42f22) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🚀 Features
 
-**Use your preferred IDE**
+- **Cost Minimization Model**  
+  Calculates minimum operational cost using input parameters and mathematical optimization.
+- **Interactive UI** built using React + ShadCN/UI.  
+- **Real-time Data Storage** using Supabase.
+- **Dynamic Input Forms** for user-defined parameters.
+- **Graphical Output** for optimization results.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🧰 Tech Stack
 
-Follow these steps:
+| Layer | Technology |
+|--------|-------------|
+| Frontend | React + TypeScript + Vite |
+| Styling | Tailwind CSS + ShadCN/UI |
+| Backend | Supabase (PostgreSQL + Auth) |
+| Icons | Lucide Icons |
+| Deployment | Vercel / Netlify |
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+---
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## 📊 Project Workflow
 
-# Step 3: Install the necessary dependencies.
-npm i
+1. **Input Parameters:**  
+   Enter costs and capacities for collection, transportation, processing, and disposal.
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+2. **Computation:**  
+   System runs a **cost minimization algorithm** using Operational Research (OR) principles.
 
-**Edit a file directly in GitHub**
+3. **Output:**  
+   Displays optimized cost and flow distribution with **visual representation**.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## 🧮 Core OR Concepts Implemented
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- Linear Programming (Cost Minimization)
+- Transportation Model
+- Assignment Problem
+- Flow Balance Constraints
+- Capacity and Resource Optimization
 
-## What technologies are used for this project?
+---
 
-This project is built with:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
 
-## How can I deploy this project?
+## 📈 Future Enhancements
 
-Simply open [Lovable](https://lovable.dev/projects/98fec772-31c5-405d-b3a7-9e6838c42f22) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- Integration with **ML-based cost prediction**
+- Export results as **PDF reports**
+- Multi-objective optimization (**cost + emissions + time**)
