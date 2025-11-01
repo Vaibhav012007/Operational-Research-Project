@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calculator, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { useEwaste } from "@/context/EwasteContext";
 
 interface OptimizationResult {
   totalCost: number;
@@ -17,6 +19,7 @@ interface OptimizationResult {
 }
 
 const CostMinimization = () => {
+  const { data } = useEwaste();
   const [inputs, setInputs] = useState({
     collectionVolume: 1000,
     transportationDistance: 50,
@@ -26,17 +29,25 @@ const CostMinimization = () => {
 
   const [result, setResult] = useState<OptimizationResult | null>(null);
 
+  // Calculate total from shared data
+  const totalZoneVolume = data.zoneVolumes.reduce((sum, vol) => sum + vol, 0);
+  const avgProcessingRate = data.processingRates.reduce((sum, rate) => sum + rate, 0) / data.processingRates.length;
+
   const handleInputChange = (field: string, value: string) => {
     setInputs({ ...inputs, [field]: parseFloat(value) || 0 });
   };
 
   const calculateOptimization = () => {
+    // Use data from shared context
+    const actualCollectionVolume = totalZoneVolume > 0 ? totalZoneVolume : inputs.collectionVolume;
+    const actualProcessingRate = avgProcessingRate > 0 ? avgProcessingRate : inputs.processingRate;
+    
     // Simplified LP model calculation
-    const collectionCost = inputs.collectionVolume * 5; // $5 per unit
-    const transportationCost = inputs.transportationDistance * inputs.collectionVolume * 0.1; // $0.1 per unit-km
-    const processingCost = inputs.collectionVolume * inputs.processingRate * 10; // $10 per unit processed
-    const disposalCost = inputs.disposalVolume * 15; // $15 per unit
-    const recoveryValue = inputs.collectionVolume * inputs.processingRate * 0.6 * 20; // $20 per unit recovered
+    const collectionCost = actualCollectionVolume * 415; // ₹415 per unit
+    const transportationCost = inputs.transportationDistance * actualCollectionVolume * 8.3; // ₹8.3 per unit-km
+    const processingCost = actualCollectionVolume * actualProcessingRate * 830; // ₹830 per unit processed
+    const disposalCost = inputs.disposalVolume * 1245; // ₹1245 per unit
+    const recoveryValue = actualCollectionVolume * actualProcessingRate * 0.6 * 1660; // ₹1660 per unit recovered
     
     const totalCost = collectionCost + transportationCost + processingCost + disposalCost;
     const netCost = totalCost - recoveryValue;
@@ -51,7 +62,7 @@ const CostMinimization = () => {
       netCost,
     });
 
-    toast.success("Optimization complete!");
+    toast.success("Optimization complete! (Using data from Assignment & Transportation models)");
   };
 
   return (
@@ -136,35 +147,39 @@ const CostMinimization = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">Collection Cost</div>
-                      <div className="text-2xl font-bold">${result.collectionCost.toFixed(2)}</div>
+                      <div className="text-2xl font-bold">₹{result.collectionCost.toFixed(2)}</div>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">Transportation</div>
-                      <div className="text-2xl font-bold">${result.transportationCost.toFixed(2)}</div>
+                      <div className="text-2xl font-bold">₹{result.transportationCost.toFixed(2)}</div>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">Processing Cost</div>
-                      <div className="text-2xl font-bold">${result.processingCost.toFixed(2)}</div>
+                      <div className="text-2xl font-bold">₹{result.processingCost.toFixed(2)}</div>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <div className="text-sm text-muted-foreground">Disposal Cost</div>
-                      <div className="text-2xl font-bold">${result.disposalCost.toFixed(2)}</div>
+                      <div className="text-2xl font-bold">₹{result.disposalCost.toFixed(2)}</div>
                     </div>
                   </div>
 
                   <div className="border-t pt-4 space-y-3">
                     <div className="flex justify-between items-center text-lg">
                       <span>Total Cost:</span>
-                      <span className="font-bold">${result.totalCost.toFixed(2)}</span>
+                      <span className="font-bold">₹{result.totalCost.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-lg text-primary">
                       <span>Recovery Value:</span>
-                      <span className="font-bold">-${result.recoveryValue.toFixed(2)}</span>
+                      <span className="font-bold">-₹{result.recoveryValue.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-xl pt-3 border-t">
                       <span className="font-semibold">Net Cost:</span>
-                      <span className="font-bold text-primary">${result.netCost.toFixed(2)}</span>
+                      <span className="font-bold text-primary">₹{result.netCost.toFixed(2)}</span>
                     </div>
+                  </div>
+
+                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg text-sm">
+                    <strong>Data Source:</strong> Using {data.zones.length} zones with total volume of {totalZoneVolume} units
                   </div>
                 </div>
               ) : (
@@ -175,6 +190,67 @@ const CostMinimization = () => {
             </CardContent>
           </Card>
         </div>
+
+        {result && (
+          <div className="grid md:grid-cols-2 gap-6 mt-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost Breakdown</CardTitle>
+                <CardDescription>Bar chart of cost components</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={[
+                    { name: 'Collection', value: result.collectionCost },
+                    { name: 'Transport', value: result.transportationCost },
+                    { name: 'Processing', value: result.processingCost },
+                    { name: 'Disposal', value: result.disposalCost },
+                  ]}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="value" fill="hsl(var(--primary))" name="Cost (₹)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost Distribution</CardTitle>
+                <CardDescription>Pie chart of cost allocation</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Collection', value: result.collectionCost },
+                        { name: 'Transportation', value: result.transportationCost },
+                        { name: 'Processing', value: result.processingCost },
+                        { name: 'Disposal', value: result.disposalCost },
+                      ]}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={(entry) => `₹${entry.value.toFixed(0)}`}
+                    >
+                      <Cell fill="hsl(var(--primary))" />
+                      <Cell fill="hsl(var(--secondary))" />
+                      <Cell fill="hsl(var(--accent))" />
+                      <Cell fill="hsl(var(--chart-1))" />
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Recycle, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { useEwaste } from "@/context/EwasteContext";
 
 interface Assignment {
   vehicle: string;
@@ -14,35 +14,23 @@ interface Assignment {
 }
 
 const AssignmentProblem = () => {
+  const { data, addVehicle: addVehicleContext, removeVehicle: removeVehicleContext, addZone: addZoneContext, removeZone: removeZoneContext, updateData } = useEwaste();
   const [solving, setSolving] = useState(false);
   const [solution, setSolution] = useState<Assignment[] | null>(null);
 
-  // Sample cost matrix: Vehicle i to Zone j
-  const [costMatrix, setCostMatrix] = useState([
-    [45, 60, 50, 55], // Vehicle 1
-    [50, 40, 55, 45], // Vehicle 2
-    [55, 45, 40, 50], // Vehicle 3
-    [50, 55, 45, 40], // Vehicle 4
-  ]);
-
-  const [zones, setZones] = useState(["Zone A", "Zone B", "Zone C", "Zone D"]);
-  const [vehicles, setVehicles] = useState(["Vehicle 1", "Vehicle 2", "Vehicle 3", "Vehicle 4"]);
+  const { zones, vehicles, assignmentCosts: costMatrix } = data;
 
   const updateCost = (row: number, col: number, value: string) => {
     const numValue = parseInt(value) || 0;
     const newMatrix = costMatrix.map((r, i) => 
       i === row ? r.map((c, j) => j === col ? numValue : c) : r
     );
-    setCostMatrix(newMatrix);
-    setSolution(null); // Reset solution when costs change
+    updateData({ assignmentCosts: newMatrix });
+    setSolution(null);
   };
 
   const addVehicle = () => {
-    const newVehicleNumber = vehicles.length + 1;
-    setVehicles([...vehicles, `Vehicle ${newVehicleNumber}`]);
-    // Add new row with default costs
-    const newRow = Array(zones.length).fill(50);
-    setCostMatrix([...costMatrix, newRow]);
+    addVehicleContext();
     setSolution(null);
     toast.success("Vehicle added");
   };
@@ -52,17 +40,13 @@ const AssignmentProblem = () => {
       toast.error("Must have at least one vehicle");
       return;
     }
-    setVehicles(vehicles.filter((_, i) => i !== index));
-    setCostMatrix(costMatrix.filter((_, i) => i !== index));
+    removeVehicleContext(index);
     setSolution(null);
     toast.success("Vehicle removed");
   };
 
   const addZone = () => {
-    const newZoneLetter = String.fromCharCode(65 + zones.length);
-    setZones([...zones, `Zone ${newZoneLetter}`]);
-    // Add new column with default costs to each row
-    setCostMatrix(costMatrix.map(row => [...row, 50]));
+    addZoneContext();
     setSolution(null);
     toast.success("Zone added");
   };
@@ -72,8 +56,7 @@ const AssignmentProblem = () => {
       toast.error("Must have at least one zone");
       return;
     }
-    setZones(zones.filter((_, i) => i !== index));
-    setCostMatrix(costMatrix.map(row => row.filter((_, i) => i !== index)));
+    removeZoneContext(index);
     setSolution(null);
     toast.success("Zone removed");
   };
@@ -106,11 +89,24 @@ const AssignmentProblem = () => {
 
   const totalCost = solution?.reduce((sum, assignment) => sum + assignment.cost, 0) || 0;
 
-  const chartData = solution?.map(assignment => ({
+  const barChartData = solution?.map(assignment => ({
     name: assignment.vehicle,
     zone: assignment.zone,
     cost: assignment.cost,
   })) || [];
+
+  const pieChartData = solution?.map(assignment => ({
+    name: `${assignment.vehicle} → ${assignment.zone}`,
+    value: assignment.cost,
+  })) || [];
+
+  const lineChartData = solution?.map((assignment, index) => ({
+    assignment: index + 1,
+    cost: assignment.cost,
+    name: assignment.vehicle,
+  })) || [];
+
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))', 'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))'];
 
   return (
     <section id="assignment" className="py-16 px-4 bg-muted/30">
@@ -130,7 +126,7 @@ const AssignmentProblem = () => {
           <Card>
             <CardHeader>
               <CardTitle>Cost Matrix</CardTitle>
-              <CardDescription>Cost of assigning each vehicle to each zone ($)</CardDescription>
+              <CardDescription>Cost of assigning each vehicle to each zone (₹)</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="mb-4 flex gap-2">
@@ -219,7 +215,7 @@ const AssignmentProblem = () => {
                       <TableRow>
                         <TableHead>Vehicle</TableHead>
                         <TableHead>Assigned Zone</TableHead>
-                        <TableHead className="text-right">Cost ($)</TableHead>
+                        <TableHead className="text-right">Cost (₹)</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -227,13 +223,13 @@ const AssignmentProblem = () => {
                         <TableRow key={index}>
                           <TableCell className="font-medium">{assignment.vehicle}</TableCell>
                           <TableCell>{assignment.zone}</TableCell>
-                          <TableCell className="text-right">${assignment.cost}</TableCell>
+                          <TableCell className="text-right">₹{assignment.cost}</TableCell>
                         </TableRow>
                       ))}
                       <TableRow className="bg-muted/50">
                         <TableCell colSpan={2} className="font-bold">Total Cost</TableCell>
                         <TableCell className="text-right font-bold text-primary">
-                          ${totalCost}
+                          ₹{totalCost}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -244,7 +240,7 @@ const AssignmentProblem = () => {
                       <strong className="text-foreground">Constraints Satisfied:</strong>
                       <br />• Each vehicle assigned to exactly one zone
                       <br />• Each zone receives exactly one vehicle
-                      <br />• Total cost minimized: ${totalCost}
+                      <br />• Total cost minimized: ₹{totalCost}
                     </p>
                   </div>
                 </div>
@@ -258,24 +254,72 @@ const AssignmentProblem = () => {
         </div>
 
         {solution && (
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Assignment Cost Visualization</CardTitle>
-              <CardDescription>Visual representation of assignment costs</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="cost" fill="hsl(var(--primary))" name="Assignment Cost ($)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <div className="grid md:grid-cols-2 gap-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost Bar Chart</CardTitle>
+                <CardDescription>Assignment costs by vehicle</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={barChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="cost" fill="hsl(var(--primary))" name="Cost (₹)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost Distribution</CardTitle>
+                <CardDescription>Pie chart showing cost proportions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={pieChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={(entry) => `₹${entry.value}`}
+                    >
+                      {pieChartData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Cost Trend Line</CardTitle>
+                <CardDescription>Line chart showing cost progression</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={lineChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="assignment" label={{ value: 'Assignment #', position: 'insideBottom', offset: -5 }} />
+                    <YAxis label={{ value: 'Cost (₹)', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="cost" stroke="hsl(var(--primary))" strokeWidth={2} name="Cost (₹)" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
     </section>

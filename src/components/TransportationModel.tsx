@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GitBranch, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { useEwaste } from "@/context/EwasteContext";
 
 interface TransportationPlan {
   from: string;
@@ -14,54 +15,37 @@ interface TransportationPlan {
 }
 
 const TransportationModel = () => {
+  const { data, addCollectionPoint, removeCollectionPoint, addProcessingCenter, removeProcessingCenter, updateData } = useEwaste();
   const [solving, setSolving] = useState(false);
   const [solution, setSolution] = useState<TransportationPlan[] | null>(null);
 
-  // Supply (collection points), Demand (processing centers), Unit costs
-  const [sources, setSources] = useState(["Collection A", "Collection B", "Collection C"]);
-  const [destinations, setDestinations] = useState(["Processing 1", "Processing 2", "Processing 3"]);
-  const [supply, setSupply] = useState([300, 400, 500]); // units available
-  const [demand, setDemand] = useState([400, 500, 300]); // units needed
-  
-  // Cost matrix: source i to destination j ($/unit)
-  const [costMatrix, setCostMatrix] = useState([
-    [8, 6, 10],
-    [9, 12, 13],
-    [14, 9, 16],
-  ]);
+  const { collectionPoints: sources, processingCenters: destinations, supply, demand, transportationCosts: costMatrix } = data;
 
   const updateSupply = (index: number, value: string) => {
     const numValue = parseInt(value) || 0;
-    const newSupply = [...supply];
-    newSupply[index] = numValue;
-    setSupply(newSupply);
+    const newSupply = supply.map((s, i) => (i === index ? numValue : s));
+    updateData({ supply: newSupply });
     setSolution(null);
   };
 
   const updateDemand = (index: number, value: string) => {
     const numValue = parseInt(value) || 0;
-    const newDemand = [...demand];
-    newDemand[index] = numValue;
-    setDemand(newDemand);
+    const newDemand = demand.map((d, i) => (i === index ? numValue : d));
+    updateData({ demand: newDemand });
     setSolution(null);
   };
 
   const updateCost = (row: number, col: number, value: string) => {
     const numValue = parseInt(value) || 0;
-    const newMatrix = costMatrix.map((r, i) => 
-      i === row ? r.map((c, j) => j === col ? numValue : c) : r
+    const newMatrix = costMatrix.map((r, i) =>
+      i === row ? r.map((c, j) => (j === col ? numValue : c)) : r
     );
-    setCostMatrix(newMatrix);
+    updateData({ transportationCosts: newMatrix });
     setSolution(null);
   };
 
   const addSource = () => {
-    const newSourceLetter = String.fromCharCode(65 + sources.length);
-    setSources([...sources, `Collection ${newSourceLetter}`]);
-    setSupply([...supply, 100]);
-    // Add new row with default costs
-    const newRow = Array(destinations.length).fill(10);
-    setCostMatrix([...costMatrix, newRow]);
+    addCollectionPoint();
     setSolution(null);
     toast.success("Collection point added");
   };
@@ -71,19 +55,13 @@ const TransportationModel = () => {
       toast.error("Must have at least one collection point");
       return;
     }
-    setSources(sources.filter((_, i) => i !== index));
-    setSupply(supply.filter((_, i) => i !== index));
-    setCostMatrix(costMatrix.filter((_, i) => i !== index));
+    removeCollectionPoint(index);
     setSolution(null);
     toast.success("Collection point removed");
   };
 
   const addDestination = () => {
-    const newDestNumber = destinations.length + 1;
-    setDestinations([...destinations, `Processing ${newDestNumber}`]);
-    setDemand([...demand, 100]);
-    // Add new column with default costs to each row
-    setCostMatrix(costMatrix.map(row => [...row, 10]));
+    addProcessingCenter();
     setSolution(null);
     toast.success("Processing center added");
   };
@@ -93,127 +71,92 @@ const TransportationModel = () => {
       toast.error("Must have at least one processing center");
       return;
     }
-    setDestinations(destinations.filter((_, i) => i !== index));
-    setDemand(demand.filter((_, i) => i !== index));
-    setCostMatrix(costMatrix.map(row => row.filter((_, i) => i !== index)));
+    removeProcessingCenter(index);
     setSolution(null);
     toast.success("Processing center removed");
   };
 
   const solveTransportation = () => {
-    const solveTransportation = () => {
     const totalSupply = supply.reduce((a, b) => a + b, 0);
     const totalDemand = demand.reduce((a, b) => a + b, 0);
-
+    
     if (totalSupply !== totalDemand) {
       toast.error(`Supply (${totalSupply}) must equal Demand (${totalDemand})`);
       return;
     }
-
+    
     setSolving(true);
-
+    
     setTimeout(() => {
-      const n = sources.length;
-      const m = destinations.length;
-
+      // Vogel's Approximation Method (VAM)
+      const optimalPlan: TransportationPlan[] = [];
       const remainingSupply = [...supply];
       const remainingDemand = [...demand];
-      const allocated = Array.from({ length: n }, () => Array(m).fill(0));
-      const usedRow = Array(n).fill(false);
-      const usedCol = Array(m).fill(false);
+      const m = sources.length;
+      const n = destinations.length;
 
-      const calcPenalty = (matrix, usedRow, usedCol) => {
-        const rowPenalty = Array(n).fill(0);
-        const colPenalty = Array(m).fill(0);
+      while (remainingSupply.some(s => s > 0) && remainingDemand.some(d => d > 0)) {
+        // Calculate penalties for rows
+        const rowPenalties = remainingSupply.map((s, i) => {
+          if (s === 0) return -1;
+          const costs = remainingDemand.map((d, j) => d > 0 ? costMatrix[i][j] : Infinity).sort((a, b) => a - b);
+          return costs.length >= 2 ? costs[1] - costs[0] : costs[0];
+        });
 
-        // Row penalties
-        for (let i = 0; i < n; i++) {
-          if (usedRow[i]) continue;
-          const costs = matrix[i].filter((_, j) => !usedCol[j]);
-          if (costs.length >= 2) {
-            const sorted = [...costs].sort((a, b) => a - b);
-            rowPenalty[i] = sorted[1] - sorted[0];
-          } else if (costs.length === 1) {
-            rowPenalty[i] = costs[0];
-          }
-        }
+        // Calculate penalties for columns
+        const colPenalties = remainingDemand.map((d, j) => {
+          if (d === 0) return -1;
+          const costs = remainingSupply.map((s, i) => s > 0 ? costMatrix[i][j] : Infinity).sort((a, b) => a - b);
+          return costs.length >= 2 ? costs[1] - costs[0] : costs[0];
+        });
 
-        // Column penalties
-        for (let j = 0; j < m; j++) {
-          if (usedCol[j]) continue;
-          const costs = matrix.map(row => row[j]).filter((_, i) => !usedRow[i]);
-          if (costs.length >= 2) {
-            const sorted = [...costs].sort((a, b) => a - b);
-            colPenalty[j] = sorted[1] - sorted[0];
-          } else if (costs.length === 1) {
-            colPenalty[j] = costs[0];
-          }
-        }
+        // Find maximum penalty
+        const maxRowPenalty = Math.max(...rowPenalties);
+        const maxColPenalty = Math.max(...colPenalties);
 
-        return { rowPenalty, colPenalty };
-      };
+        let selectedRow = -1;
+        let selectedCol = -1;
 
-      while (usedRow.some(v => !v) && usedCol.some(v => !v)) {
-        const { rowPenalty, colPenalty } = calcPenalty(costMatrix, usedRow, usedCol);
-
-        let maxRowPenalty = Math.max(...rowPenalty);
-        let maxColPenalty = Math.max(...colPenalty);
-
-        let isRow = maxRowPenalty >= maxColPenalty;
-        let selectedRow = -1, selectedCol = -1;
-
-        if (isRow) {
-          selectedRow = rowPenalty.indexOf(maxRowPenalty);
-          // Choose min-cost cell in this row
+        if (maxRowPenalty >= maxColPenalty) {
+          selectedRow = rowPenalties.indexOf(maxRowPenalty);
+          // Find minimum cost in selected row
           let minCost = Infinity;
-          for (let j = 0; j < m; j++) {
-            if (!usedCol[j] && costMatrix[selectedRow][j] < minCost) {
+          for (let j = 0; j < n; j++) {
+            if (remainingDemand[j] > 0 && costMatrix[selectedRow][j] < minCost) {
               minCost = costMatrix[selectedRow][j];
               selectedCol = j;
             }
           }
         } else {
-          selectedCol = colPenalty.indexOf(maxColPenalty);
-          // Choose min-cost cell in this column
+          selectedCol = colPenalties.indexOf(maxColPenalty);
+          // Find minimum cost in selected column
           let minCost = Infinity;
-          for (let i = 0; i < n; i++) {
-            if (!usedRow[i] && costMatrix[i][selectedCol] < minCost) {
+          for (let i = 0; i < m; i++) {
+            if (remainingSupply[i] > 0 && costMatrix[i][selectedCol] < minCost) {
               minCost = costMatrix[i][selectedCol];
               selectedRow = i;
             }
           }
         }
 
+        // Allocate
         const quantity = Math.min(remainingSupply[selectedRow], remainingDemand[selectedCol]);
-        allocated[selectedRow][selectedCol] = quantity;
-
-        remainingSupply[selectedRow] -= quantity;
-        remainingDemand[selectedCol] -= quantity;
-
-        if (remainingSupply[selectedRow] === 0) usedRow[selectedRow] = true;
-        if (remainingDemand[selectedCol] === 0) usedCol[selectedCol] = true;
-      }
-
-      const optimalPlan: TransportationPlan[] = [];
-      for (let i = 0; i < n; i++) {
-        for (let j = 0; j < m; j++) {
-          if (allocated[i][j] > 0) {
-            optimalPlan.push({
-              from: sources[i],
-              to: destinations[j],
-              quantity: allocated[i][j],
-              cost: costMatrix[i][j],
-            });
-          }
+        if (quantity > 0) {
+          optimalPlan.push({
+            from: sources[selectedRow],
+            to: destinations[selectedCol],
+            quantity,
+            cost: costMatrix[selectedRow][selectedCol],
+          });
+          remainingSupply[selectedRow] -= quantity;
+          remainingDemand[selectedCol] -= quantity;
         }
       }
 
-      setSolution(optimalPlan);
+      setSolution(optimalPlan.filter(p => p.quantity > 0));
       setSolving(false);
-      toast.success("Optimal transportation plan (VAM) found!");
-    }, 1200);
-  };
-
+      toast.success("Optimal plan found using Vogel's Approximation Method!");
+    }, 1500);
   };
 
   const totalCost = solution?.reduce((sum, plan) => sum + (plan.quantity * plan.cost), 0) || 0;
@@ -223,6 +166,19 @@ const TransportationModel = () => {
     quantity: plan.quantity,
     cost: plan.quantity * plan.cost,
   })) || [];
+
+  const pieChartData = solution?.map(plan => ({
+    name: `${plan.from} → ${plan.to}`,
+    value: plan.quantity * plan.cost,
+  })) || [];
+
+  const lineChartData = solution?.map((plan, index) => ({
+    route: index + 1,
+    quantity: plan.quantity,
+    cost: plan.quantity * plan.cost,
+  })) || [];
+
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))', 'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))'];
 
   return (
     <section id="transportation" className="py-16 px-4">
@@ -284,7 +240,7 @@ const TransportationModel = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Cost Matrix ($/unit)</CardTitle>
+                <CardTitle className="text-lg">Cost Matrix (₹/unit)</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -399,16 +355,16 @@ const TransportationModel = () => {
                           <TableCell className="font-medium">{plan.from}</TableCell>
                           <TableCell>{plan.to}</TableCell>
                           <TableCell className="text-right">{plan.quantity}</TableCell>
-                          <TableCell className="text-right">${plan.cost}</TableCell>
+                          <TableCell className="text-right">₹{plan.cost}</TableCell>
                           <TableCell className="text-right font-semibold">
-                            ${plan.quantity * plan.cost}
+                            ₹{plan.quantity * plan.cost}
                           </TableCell>
                         </TableRow>
                       ))}
                       <TableRow className="bg-muted/50">
                         <TableCell colSpan={4} className="font-bold">Minimum Total Transportation Cost</TableCell>
                         <TableCell className="text-right font-bold text-primary text-lg">
-                          ${totalCost}
+                          ₹{totalCost}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -442,25 +398,75 @@ const TransportationModel = () => {
           </Card>
 
           {solution && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Transportation Flow Visualization</CardTitle>
-                <CardDescription>Visual representation of optimal flow and costs</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={flowData} layout="vertical" margin={{ left: 120 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="route" type="category" width={110} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="quantity" fill="hsl(var(--primary))" name="Quantity (units)" />
-                    <Bar dataKey="cost" fill="hsl(var(--secondary))" name="Total Cost ($)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            <div className="grid md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Flow & Cost Analysis</CardTitle>
+                  <CardDescription>Quantity and cost by route</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={flowData} layout="vertical" margin={{ left: 120 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="route" type="category" width={110} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="quantity" fill="hsl(var(--primary))" name="Quantity" />
+                      <Bar dataKey="cost" fill="hsl(var(--secondary))" name="Cost (₹)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cost Distribution</CardTitle>
+                  <CardDescription>Pie chart of costs by route</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <PieChart>
+                      <Pie
+                        data={pieChartData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={(entry) => `₹${entry.value.toFixed(0)}`}
+                      >
+                        {pieChartData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle>Route Trend Analysis</CardTitle>
+                  <CardDescription>Line chart showing quantity and cost trends</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={lineChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="route" label={{ value: 'Route #', position: 'insideBottom', offset: -5 }} />
+                      <YAxis yAxisId="left" label={{ value: 'Quantity', angle: -90, position: 'insideLeft' }} />
+                      <YAxis yAxisId="right" orientation="right" label={{ value: 'Cost (₹)', angle: 90, position: 'insideRight' }} />
+                      <Tooltip />
+                      <Legend />
+                      <Line yAxisId="left" type="monotone" dataKey="quantity" stroke="hsl(var(--primary))" strokeWidth={2} name="Quantity" />
+                      <Line yAxisId="right" type="monotone" dataKey="cost" stroke="hsl(var(--secondary))" strokeWidth={2} name="Cost ($)" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </div>

@@ -1,9 +1,46 @@
-import { Recycle, TrendingDown, GitBranch } from "lucide-react";
+import { Recycle, TrendingDown, GitBranch, LogIn } from "lucide-react";
+import { Button } from "./ui/button";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 
 const Hero = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-secondary/5 py-20 px-4">
       <div className="container mx-auto max-w-6xl">
+        <div className="absolute top-4 right-4">
+          {user ? (
+            <Button onClick={handleLogout} variant="outline">
+              Logout
+            </Button>
+          ) : (
+            <Button onClick={() => navigate("/auth")} variant="default">
+              <LogIn className="w-4 h-4 mr-2" />
+              Login
+            </Button>
+          )}
+        </div>
         <div className="text-center space-y-6">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full text-sm font-medium text-primary">
             <Recycle className="w-4 h-4" />
