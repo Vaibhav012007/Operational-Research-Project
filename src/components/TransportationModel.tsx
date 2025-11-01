@@ -101,43 +101,119 @@ const TransportationModel = () => {
   };
 
   const solveTransportation = () => {
+    const solveTransportation = () => {
     const totalSupply = supply.reduce((a, b) => a + b, 0);
     const totalDemand = demand.reduce((a, b) => a + b, 0);
-    
+
     if (totalSupply !== totalDemand) {
       toast.error(`Supply (${totalSupply}) must equal Demand (${totalDemand})`);
       return;
     }
-    
+
     setSolving(true);
-    
+
     setTimeout(() => {
-      // Generate a simple optimal plan (greedy approach for demonstration)
-      const optimalPlan: TransportationPlan[] = [];
+      const n = sources.length;
+      const m = destinations.length;
+
       const remainingSupply = [...supply];
       const remainingDemand = [...demand];
+      const allocated = Array.from({ length: n }, () => Array(m).fill(0));
+      const usedRow = Array(n).fill(false);
+      const usedCol = Array(m).fill(false);
 
-      // Find minimum cost allocations
-      for (let i = 0; i < sources.length; i++) {
-        for (let j = 0; j < destinations.length; j++) {
-          const quantity = Math.min(remainingSupply[i], remainingDemand[j]);
-          if (quantity > 0) {
+      const calcPenalty = (matrix, usedRow, usedCol) => {
+        const rowPenalty = Array(n).fill(0);
+        const colPenalty = Array(m).fill(0);
+
+        // Row penalties
+        for (let i = 0; i < n; i++) {
+          if (usedRow[i]) continue;
+          const costs = matrix[i].filter((_, j) => !usedCol[j]);
+          if (costs.length >= 2) {
+            const sorted = [...costs].sort((a, b) => a - b);
+            rowPenalty[i] = sorted[1] - sorted[0];
+          } else if (costs.length === 1) {
+            rowPenalty[i] = costs[0];
+          }
+        }
+
+        // Column penalties
+        for (let j = 0; j < m; j++) {
+          if (usedCol[j]) continue;
+          const costs = matrix.map(row => row[j]).filter((_, i) => !usedRow[i]);
+          if (costs.length >= 2) {
+            const sorted = [...costs].sort((a, b) => a - b);
+            colPenalty[j] = sorted[1] - sorted[0];
+          } else if (costs.length === 1) {
+            colPenalty[j] = costs[0];
+          }
+        }
+
+        return { rowPenalty, colPenalty };
+      };
+
+      while (usedRow.some(v => !v) && usedCol.some(v => !v)) {
+        const { rowPenalty, colPenalty } = calcPenalty(costMatrix, usedRow, usedCol);
+
+        let maxRowPenalty = Math.max(...rowPenalty);
+        let maxColPenalty = Math.max(...colPenalty);
+
+        let isRow = maxRowPenalty >= maxColPenalty;
+        let selectedRow = -1, selectedCol = -1;
+
+        if (isRow) {
+          selectedRow = rowPenalty.indexOf(maxRowPenalty);
+          // Choose min-cost cell in this row
+          let minCost = Infinity;
+          for (let j = 0; j < m; j++) {
+            if (!usedCol[j] && costMatrix[selectedRow][j] < minCost) {
+              minCost = costMatrix[selectedRow][j];
+              selectedCol = j;
+            }
+          }
+        } else {
+          selectedCol = colPenalty.indexOf(maxColPenalty);
+          // Choose min-cost cell in this column
+          let minCost = Infinity;
+          for (let i = 0; i < n; i++) {
+            if (!usedRow[i] && costMatrix[i][selectedCol] < minCost) {
+              minCost = costMatrix[i][selectedCol];
+              selectedRow = i;
+            }
+          }
+        }
+
+        const quantity = Math.min(remainingSupply[selectedRow], remainingDemand[selectedCol]);
+        allocated[selectedRow][selectedCol] = quantity;
+
+        remainingSupply[selectedRow] -= quantity;
+        remainingDemand[selectedCol] -= quantity;
+
+        if (remainingSupply[selectedRow] === 0) usedRow[selectedRow] = true;
+        if (remainingDemand[selectedCol] === 0) usedCol[selectedCol] = true;
+      }
+
+      const optimalPlan: TransportationPlan[] = [];
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < m; j++) {
+          if (allocated[i][j] > 0) {
             optimalPlan.push({
               from: sources[i],
               to: destinations[j],
-              quantity,
+              quantity: allocated[i][j],
               cost: costMatrix[i][j],
             });
-            remainingSupply[i] -= quantity;
-            remainingDemand[j] -= quantity;
           }
         }
       }
 
-      setSolution(optimalPlan.filter(p => p.quantity > 0));
+      setSolution(optimalPlan);
       setSolving(false);
-      toast.success("Optimal transportation plan found!");
-    }, 1500);
+      toast.success("Optimal transportation plan (VAM) found!");
+    }, 1200);
+  };
+
   };
 
   const totalCost = solution?.reduce((sum, plan) => sum + (plan.quantity * plan.cost), 0) || 0;
